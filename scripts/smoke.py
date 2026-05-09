@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from aurelia.config import get_settings
 from aurelia.escalation import EmergencyPager
-from aurelia.intake import CallerIntake, Urgency
+from aurelia.intake import CallerIntake, PatientStatus, ReasonForCall, Urgency
 from aurelia.logging import configure
 from aurelia.sheets import SheetsAppendError, SheetsClient
 
@@ -28,9 +28,16 @@ def _make_intake(emergency: bool) -> CallerIntake:
     return CallerIntake(
         caller_name="Smoke Test (auto)",
         callback_number="555-010-0000",
-        service_address="123 Test Lane",
+        patient_status=PatientStatus.EXISTING if emergency else PatientStatus.NEW,
+        reason_for_call=(
+            ReasonForCall.POST_PROCEDURE_CONCERN if emergency else ReasonForCall.NEW_CONSULT
+        ),
+        treatment_of_interest=(
+            "Smoke-test post-procedure concern (e.g. lip filler)"
+            if emergency
+            else "Smoke-test new consult — laser hair removal"
+        ),
         urgency=Urgency.EMERGENCY if emergency else Urgency.ROUTINE,
-        problem_description=("Smoke test from scripts/smoke.py. Safe to delete this row."),
         callback_window=f"sent at {datetime.now(timezone.utc).isoformat()}",  # noqa: UP017
         notes="If you see this in production, someone ran the smoke script.",
     )

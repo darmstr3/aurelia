@@ -1,13 +1,14 @@
-"""Emergency paging for after-hours HVAC calls.
+"""Emergency paging for after-hours med-spa calls.
 
 When :class:`~aurelia.intake.CallerIntake` comes in with
-``urgency == EMERGENCY`` we send an email page to the on-call address. We
+``urgency == EMERGENCY`` we send an email page to the on-call provider. We
 deliberately keep this synchronous and stdlib-only — fewer moving parts means
 fewer failure modes during an actual emergency.
 
 Failures here are logged but never raised back to the caller flow: a missed
 page is bad, but a missed page that *also* breaks the call and prevents the
-intake from landing in Sheets is worse.
+intake from landing in Sheets is worse. The on-call team has Sheets access
+as a backstop.
 """
 
 from __future__ import annotations
@@ -49,7 +50,8 @@ def _build_message(intake: CallerIntake, *, sender: str, recipient: str) -> Emai
     """Format the on-call page email."""
     msg = EmailMessage()
     msg["Subject"] = (
-        f"[ON-CALL PAGE] HVAC emergency: {intake.caller_name} — {intake.service_address}"
+        f"[ON-CALL PAGE] Med-spa {intake.urgency.value}: {intake.caller_name} — "
+        f"{intake.treatment_of_interest}"
     )
     msg["From"] = sender
     msg["To"] = recipient
@@ -58,15 +60,15 @@ def _build_message(intake: CallerIntake, *, sender: str, recipient: str) -> Emai
         f"\n"
         f"Caller:        {intake.caller_name}\n"
         f"Callback #:    {intake.callback_number}\n"
-        f"Address:       {intake.service_address}\n"
+        f"Patient:       {intake.patient_status.value}\n"
+        f"Reason:        {intake.reason_for_call.value}\n"
+        f"Treatment:     {intake.treatment_of_interest}\n"
         f"Urgency:       {intake.urgency.value.upper()}\n"
         f"Best window:   {intake.callback_window}\n"
         f"\n"
-        f"Problem (caller's words):\n"
-        f"{intake.problem_description}\n"
+        f"Caller's words:\n"
+        f"{intake.notes or '(no additional notes)'}\n"
     )
-    if intake.notes:
-        body += f"\nAdditional notes:\n{intake.notes}\n"
     body += (
         f"\n--\nCall ID:       {intake.call_id}\nCaptured at:   {intake.captured_at.isoformat()}\n"
     )

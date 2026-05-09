@@ -11,7 +11,7 @@ from collections.abc import Iterator
 import pytest
 
 from aurelia.config import Settings, get_settings
-from aurelia.intake import CallerIntake, Urgency
+from aurelia.intake import CallerIntake, PatientStatus, ReasonForCall, Urgency
 
 
 @pytest.fixture(autouse=True)
@@ -43,24 +43,29 @@ def base_settings() -> Settings:
 
 @pytest.fixture
 def sample_intake() -> CallerIntake:
+    """A routine new-consult intake — no escalation expected."""
     return CallerIntake(
         caller_name="Maya Chen",
         callback_number="(555) 010-2030",
-        service_address="412 Cedar St, Springfield",
-        urgency=Urgency.URGENT,
-        problem_description="No heat upstairs since this morning, downstairs feels cold too.",
-        callback_window="after 8am tomorrow",
-        notes="Two cats indoors, gate code 1492.",
+        patient_status=PatientStatus.NEW,
+        reason_for_call=ReasonForCall.NEW_CONSULT,
+        treatment_of_interest="laser hair removal — underarms and bikini",
+        urgency=Urgency.ROUTINE,
+        callback_window="after 9am tomorrow",
+        notes="Has a friend who's a current patient; mentioned a referral.",
     )
 
 
 @pytest.fixture
 def emergency_intake() -> CallerIntake:
+    """A post-procedure emergency: vision changes after under-eye filler."""
     return CallerIntake(
         caller_name="Sam Patel",
         callback_number="555-010-9999",
-        service_address="88 Oak Ave",
+        patient_status=PatientStatus.EXISTING,
+        reason_for_call=ReasonForCall.POST_PROCEDURE_CONCERN,
+        treatment_of_interest="under-eye filler this afternoon",
         urgency=Urgency.EMERGENCY,
-        problem_description="Smell of gas near the furnace, kids are home.",
         callback_window="immediately",
+        notes="Reporting blurred vision in the right eye and pain near the injection site.",
     )

@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from aurelia.intake import SHEET_COLUMNS, CallerIntake, Urgency
+from aurelia.intake import (
+    SHEET_COLUMNS,
+    CallerIntake,
+    PatientStatus,
+    ReasonForCall,
+    Urgency,
+)
 
 
 class TestUrgency:
@@ -34,6 +40,50 @@ class TestUrgency:
             Urgency.from_loose("yesterday")
 
 
+class TestPatientStatus:
+    @pytest.mark.parametrize(
+        ("loose", "expected"),
+        [
+            ("new", PatientStatus.NEW),
+            ("FIRST-TIME", PatientStatus.NEW),
+            ("prospect", PatientStatus.NEW),
+            ("existing", PatientStatus.EXISTING),
+            ("returning", PatientStatus.EXISTING),
+            (" patient ", PatientStatus.EXISTING),
+        ],
+    )
+    def test_loose_parsing(self, loose: str, expected: PatientStatus) -> None:
+        assert PatientStatus.from_loose(loose) is expected
+
+    def test_unknown_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown patient status"):
+            PatientStatus.from_loose("maybe")
+
+
+class TestReasonForCall:
+    @pytest.mark.parametrize(
+        ("loose", "expected"),
+        [
+            ("post_procedure_concern", ReasonForCall.POST_PROCEDURE_CONCERN),
+            ("post-procedure", ReasonForCall.POST_PROCEDURE_CONCERN),
+            ("complication", ReasonForCall.POST_PROCEDURE_CONCERN),
+            ("new consult", ReasonForCall.NEW_CONSULT),
+            ("CONSULTATION", ReasonForCall.NEW_CONSULT),
+            ("scheduling", ReasonForCall.SCHEDULING),
+            ("Reschedule", ReasonForCall.SCHEDULING),
+            ("price", ReasonForCall.PRICING),
+            ("quote", ReasonForCall.PRICING),
+            ("other", ReasonForCall.OTHER),
+        ],
+    )
+    def test_loose_parsing(self, loose: str, expected: ReasonForCall) -> None:
+        assert ReasonForCall.from_loose(loose) is expected
+
+    def test_unknown_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown reason"):
+            ReasonForCall.from_loose("complaint about parking")
+
+
 class TestCallerIntake:
     def test_round_trip_minimal(self, sample_intake: CallerIntake) -> None:
         # captured_at and call_id are auto-populated.
@@ -49,9 +99,10 @@ class TestCallerIntake:
             CallerIntake(
                 caller_name="x",
                 callback_number=bad_phone,
-                service_address="x",
+                patient_status=PatientStatus.NEW,
+                reason_for_call=ReasonForCall.NEW_CONSULT,
+                treatment_of_interest="x",
                 urgency=Urgency.ROUTINE,
-                problem_description="x",
                 callback_window="x",
             )
 
@@ -59,9 +110,10 @@ class TestCallerIntake:
         intake = CallerIntake(
             caller_name="x",
             callback_number="  (555) 010-2030  ",
-            service_address="x",
+            patient_status=PatientStatus.NEW,
+            reason_for_call=ReasonForCall.NEW_CONSULT,
+            treatment_of_interest="x",
             urgency=Urgency.ROUTINE,
-            problem_description="x",
             callback_window="x",
         )
         # Stripped of outer whitespace, otherwise unchanged.
@@ -69,15 +121,16 @@ class TestCallerIntake:
 
     @pytest.mark.parametrize(
         "field",
-        ["caller_name", "service_address", "problem_description", "callback_window"],
+        ["caller_name", "treatment_of_interest", "callback_window"],
     )
     def test_required_string_fields_reject_blank(self, field: str) -> None:
-        kwargs = {
+        kwargs: dict[str, object] = {
             "caller_name": "x",
             "callback_number": "555-010-2030",
-            "service_address": "x",
+            "patient_status": PatientStatus.NEW,
+            "reason_for_call": ReasonForCall.NEW_CONSULT,
+            "treatment_of_interest": "x",
             "urgency": Urgency.ROUTINE,
-            "problem_description": "x",
             "callback_window": "x",
         }
         kwargs[field] = "   "
@@ -86,6 +139,9 @@ class TestCallerIntake:
 
     def test_is_emergency(self, emergency_intake: CallerIntake) -> None:
         assert emergency_intake.is_emergency is True
+
+    def test_is_post_procedure(self, emergency_intake: CallerIntake) -> None:
+        assert emergency_intake.is_post_procedure is True
 
     def test_to_sheets_row_matches_columns(self, sample_intake: CallerIntake) -> None:
         row = sample_intake.to_sheets_row()
@@ -98,17 +154,20 @@ class TestCallerIntake:
         # Spot-check that the values land in the contracted positions.
         assert row[1] == sample_intake.call_id
         assert row[2] == sample_intake.caller_name
-        assert row[5] == sample_intake.urgency.value
-        assert row[6] == sample_intake.problem_description
+        assert row[4] == sample_intake.patient_status.value
+        assert row[5] == sample_intake.reason_for_call.value
+        assert row[6] == sample_intake.treatment_of_interest
+        assert row[7] == sample_intake.urgency.value
         assert "UTC" in row[0]
 
     def test_notes_default_empty(self) -> None:
         intake = CallerIntake(
             caller_name="x",
             callback_number="555-010-2030",
-            service_address="x",
+            patient_status=PatientStatus.NEW,
+            reason_for_call=ReasonForCall.NEW_CONSULT,
+            treatment_of_interest="x",
             urgency=Urgency.ROUTINE,
-            problem_description="x",
             callback_window="x",
         )
         assert intake.notes == ""

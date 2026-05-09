@@ -63,8 +63,9 @@ class TestBuildMessage:
         body = msg.get_content()
         assert emergency_intake.caller_name in body
         assert emergency_intake.callback_number in body
-        assert emergency_intake.service_address in body
-        assert emergency_intake.problem_description in body
+        assert emergency_intake.treatment_of_interest in body
+        assert emergency_intake.patient_status.value in body
+        assert emergency_intake.reason_for_call.value in body
         assert "EMERGENCY" in body
         assert msg["From"] == "from@x"
         assert msg["To"] == "to@x"

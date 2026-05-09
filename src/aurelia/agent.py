@@ -31,7 +31,7 @@ from pydantic import Field, ValidationError
 
 from aurelia.config import Settings, get_settings
 from aurelia.escalation import EmergencyPager
-from aurelia.intake import CallerIntake, Urgency
+from aurelia.intake import CallerIntake, PatientStatus, ReasonForCall, Urgency
 from aurelia.logging import configure as configure_logging
 from aurelia.logging import get_logger
 from aurelia.prompts import greeting, system_prompt
@@ -41,7 +41,7 @@ _log = get_logger(__name__)
 
 
 class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
-    """Voice agent that captures one HVAC intake per call.
+    """Voice agent that captures one med-spa intake per call.
 
     The agent owns its persona (via the system prompt) and the
     side-effecting submit_intake tool. Sheets and pager dependencies are
@@ -76,13 +76,26 @@ class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
             str,
             Field(description="Best phone number to reach the caller, with area code."),
         ],
-        service_address: Annotated[
+        patient_status: Annotated[
             str,
-            Field(description="Address where the HVAC issue is located."),
+            Field(description="One of: new, existing."),
         ],
-        problem_description: Annotated[
+        reason_for_call: Annotated[
             str,
-            Field(description="Caller's description of the problem, in their words."),
+            Field(
+                description=(
+                    "One of: post_procedure_concern, new_consult, scheduling, pricing, other."
+                )
+            ),
+        ],
+        treatment_of_interest: Annotated[
+            str,
+            Field(
+                description=(
+                    "Treatment the caller asked about or recently received "
+                    "(e.g. 'Botox', 'lip filler last Tuesday', 'laser hair removal')."
+                )
+            ),
         ],
         urgency: Annotated[
             str,
@@ -90,14 +103,14 @@ class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
         ],
         callback_window: Annotated[
             str,
-            Field(description="When the caller wants to be reached, e.g. 'after 8am tomorrow'."),
+            Field(description="When the caller wants to be reached, e.g. 'after 9am tomorrow'."),
         ],
         notes: Annotated[
             str,
             Field(default="", description="Any extra context the caller volunteered."),
         ] = "",
     ) -> str:
-        """Validate, persist to Sheets, and (if emergency) page the on-call tech.
+        """Validate, persist to Sheets, and (if emergency) page the on-call provider.
 
         Returns a short status string for the LLM to relay verbally.
         """
@@ -111,8 +124,9 @@ class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
             intake = CallerIntake(
                 caller_name=caller_name,
                 callback_number=callback_number,
-                service_address=service_address,
-                problem_description=problem_description,
+                patient_status=PatientStatus.from_loose(patient_status),
+                reason_for_call=ReasonForCall.from_loose(reason_for_call),
+                treatment_of_interest=treatment_of_interest,
                 urgency=Urgency.from_loose(urgency),
                 callback_window=callback_window,
                 notes=notes,
@@ -146,14 +160,15 @@ class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
         if intake.is_emergency and paged:
             return (
                 "Got it — I've recorded your information and I'm paging the "
-                "on-call technician right now. They'll call you back at "
+                "on-call provider right now. They'll call you back at "
                 f"{intake.callback_number} as soon as they can."
             )
         if intake.is_emergency:
             return (
                 "I've recorded your information. I had trouble reaching the "
                 "on-call line, but our team will see this first thing. If "
-                "this is a true emergency, please also dial 911 if needed."
+                "anything feels worse — trouble breathing, severe pain, "
+                "vision changes — please call 911 right away."
             )
         return (
             f"All set, {intake.caller_name}. We'll call you back at "

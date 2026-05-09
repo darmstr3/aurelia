@@ -1,6 +1,6 @@
 # Aurelia
 
-After-hours AI intake agent for a residential HVAC company. Handles overflow calls when the office is closed: greets the caller, captures a structured intake (name, callback number, problem, urgency, service address, callback window), writes the record to Google Sheets, and pages the on-call tech if it's an emergency.
+After-hours AI intake agent for a medical spa. Handles overflow calls when the front desk is closed: greets the caller, captures a structured intake (name, callback number, new vs. existing patient, reason for the call, treatment of interest, urgency, callback window), writes the record to Google Sheets, and pages the on-call provider if the situation looks like a post-procedure emergency.
 
 > **Status:** under active development. This is a portfolio piece showing production-grade engineering practices around a real voice-agent use case.
 
@@ -39,13 +39,14 @@ caller → SIP trunk → LiveKit room ─▶ AgentSession
 src/aurelia/
 ├── config.py       Pydantic Settings, env loading, secret handling
 ├── logging.py      structlog setup (dev console / prod JSON)
-├── intake.py       CallerIntake model + Urgency enum + sheets row contract
-├── prompts.py      System prompt + greeting builders
+├── intake.py       CallerIntake model + Urgency / PatientStatus / ReasonForCall
+├── prompts.py      System prompt + greeting builders (incl. triage rules)
 ├── sheets.py       Google Sheets append client with retry
 ├── escalation.py   SMTP emergency pager (never raises into the call flow)
 ├── agent.py        LiveKit AgentSession + submit_intake function tool
 └── cli.py          aurelia [dev|connect|start] entrypoint
 tests/              Mocked unit tests for everything above
+scripts/smoke.py    Manual data-plane smoke test (Sheets + email, no LiveKit)
 ```
 
 ## Running locally
@@ -65,7 +66,7 @@ uv run python -c "from aurelia.sheets import SheetsClient; SheetsClient().ensure
 uv run aurelia dev
 ```
 
-To talk to the agent, join the LiveKit room from the [LiveKit Sandbox](https://agents-playground.livekit.io/) or wire up a SIP trunk (see *Phone setup* below).
+To talk to the agent without setting up phone trunking, open the [LiveKit Agents Playground](https://agents-playground.livekit.io/) and connect to the same project — your browser mic talks directly to the agent.
 
 ## Tests, lint, types
 
@@ -74,6 +75,13 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv run pytest
+```
+
+For a manual data-plane probe (Sheets + email, no LiveKit needed):
+
+```bash
+uv run python scripts/smoke.py --header           # routine intake
+uv run python scripts/smoke.py --emergency        # also fires the page email
 ```
 
 ## Phone setup (LiveKit SIP)
@@ -94,6 +102,8 @@ The repo includes `render.yaml`. Push to GitHub, click *New → Blueprint* on Re
 
 - **Intake is the contract.** Everything funnels into a single Pydantic `CallerIntake` model, validated before it ever leaves the agent. The model owns the Sheets row layout via `to_sheets_row()`; the LLM never picks the column order.
 - **The LLM has exactly one side-effecting tool.** `submit_intake` is the only way the agent writes anything. Easier to reason about, easier to test, and a duplicate-call guard means the model can re-mention "I've recorded that" without firing two writes.
+- **Triage rules live in the prompt, not the code.** The clinic's medical director can review and edit `prompts.py` without touching Python — what counts as an emergency (vascular event, vision changes, signs of infection, allergic reaction) is a clinical judgment, not a software one. Emergency-language matching in `Urgency.from_loose` is a defensive backstop, not the primary gate.
+- **Safety redirect to 911 comes first.** If the caller describes anaphylaxis, sudden vision loss, chest pain, or uncontrolled bleeding, the prompt instructs Aurelia to interrupt the intake and tell them to hang up and dial 911. The intake is still captured — but the redirect happens before the field-by-field collection.
 - **External services are mocked in tests.** `SheetsClient` accepts an injected service; `EmergencyPager` accepts an injected SMTP factory. The call flow is tested by exercising `submit_intake` against those fakes — no LiveKit room required.
 - **Failures degrade in the right direction.** Sheets retries on 5xx/429 with exponential backoff; on permanent failure the agent apologizes and tells the caller to call back during business hours. The pager *never* raises — a missed page must not also drop the intake row.
 - **Logs are structured from day one.** `structlog` with key-value events. JSON in production for ingestion; pretty console renderer in dev.
@@ -106,8 +116,12 @@ The code-side build is done. What's left is bringing-up:
 2. Create the Google service-account key, share the Sheet with its email, and run `ensure_header()` to seed the header row.
 3. Provision a LiveKit project + SIP trunk + phone number; verify dispatch routing.
 4. Connect the GitHub repo on Render, paste secrets, deploy.
-5. Place a real call to the number and confirm: row in Sheets, page email received for an emergency.
+5. Place a real call to the number and confirm: row in Sheets, page email received for an emergency-flagged call.
 6. Capture the demo recording + Sheets screenshot for this README.
+
+## Why a med spa?
+
+After-hours overflow at small medical spas is a real, non-trivial problem: walk-ins are rare but post-procedure concerns at 9pm aren't, and the on-call provider needs structured information before they call back. This made it a good shape for the project: realistic urgency tiers, a plausible reason to escalate (vascular complications from filler need treatment within hours), and tabular intake data that's actually useful sitting in a sheet the next morning.
 
 ## What I'd do differently next time
 

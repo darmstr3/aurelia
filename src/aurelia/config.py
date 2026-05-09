@@ -37,9 +37,9 @@ class Settings(BaseSettings):
     aurelia_log_level: str = Field(default="INFO")
 
     # ---- Persona ----
-    aurelia_company_name: str = Field(default="Northwind Heating & Cooling")
+    aurelia_company_name: str = Field(default="Lumen Aesthetics")
     aurelia_agent_name: str = Field(default="Aurelia")
-    aurelia_business_hours: str = Field(default="Monday through Friday, 7am to 6pm")
+    aurelia_business_hours: str = Field(default="Monday through Friday, 9am to 6pm")
 
     # ---- LiveKit ----
     # The LiveKit Agents SDK reads these directly, but we surface them so
