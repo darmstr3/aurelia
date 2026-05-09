@@ -104,8 +104,17 @@ class SheetsClient:
     ) -> None:
         self._settings = settings or get_settings()
         self._service: _SheetsService | None = service
-        self._spreadsheet_id = self._settings.google_sheets_spreadsheet_id
-        self._worksheet = self._settings.google_sheets_worksheet_name
+        self._spreadsheet_id = self._settings.google_sheets_spreadsheet_id.strip()
+        # Strip whitespace/CR — .env editors sometimes save CRLF and a trailing
+        # \r in the sheet name produces "Unable to parse range" from the API.
+        self._worksheet = self._settings.google_sheets_worksheet_name.strip()
+
+    def _range(self, cell: str) -> str:
+        """Build a Sheets API range. Sheet name is single-quoted for safety
+        (handles spaces, apostrophes, and odd characters without changing the
+        call sites)."""
+        escaped = self._worksheet.replace("'", "''")
+        return f"'{escaped}'!{cell}"
 
     # ---- Internals ----
 
@@ -127,7 +136,7 @@ class SheetsClient:
         sheets = self._get_service().spreadsheets()
         request = sheets.values().append(
             spreadsheetId=self._spreadsheet_id,
-            range=f"{self._worksheet}!A1",
+            range=self._range("A1"),
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body={"values": [row]},
@@ -181,7 +190,7 @@ class SheetsClient:
         sheets = self._get_service().spreadsheets()
         result = (
             sheets.values()
-            .get(spreadsheetId=self._spreadsheet_id, range=f"{self._worksheet}!A1:A1")
+            .get(spreadsheetId=self._spreadsheet_id, range=self._range("A1:A1"))
             .execute()
         )
         existing = result.get("values") or []
@@ -190,7 +199,7 @@ class SheetsClient:
             return
         sheets.values().update(
             spreadsheetId=self._spreadsheet_id,
-            range=f"{self._worksheet}!A1",
+            range=self._range("A1"),
             valueInputOption="USER_ENTERED",
             body={"values": [list(SHEET_COLUMNS)]},
         ).execute()

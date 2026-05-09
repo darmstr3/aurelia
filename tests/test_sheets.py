@@ -53,7 +53,7 @@ class TestAppendIntake:
         append_call.assert_called_once()
         kwargs = append_call.call_args.kwargs
         assert kwargs["spreadsheetId"] == "test-spreadsheet-id"
-        assert kwargs["range"] == "Intakes!A1"
+        assert kwargs["range"] == "'Intakes'!A1"
         assert kwargs["body"]["values"][0] == sample_intake.to_sheets_row()
 
     def test_retries_on_500_then_succeeds(

@@ -115,7 +115,9 @@ class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
 
         Returns a short status string for the LLM to relay verbally.
         """
-        log = _log.bind(call_id=ctx.session.room.name if ctx.session.room else "unknown")
+        # Note: in livekit-agents 1.5, RunContext does not expose .room directly.
+        # The intake's own call_id is the durable identifier we log against.
+        log = _log
 
         if self._submitted:
             log.warning("submit_intake.duplicate_call")
