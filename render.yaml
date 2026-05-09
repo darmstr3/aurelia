@@ -13,7 +13,9 @@ services:
     region: oregon
     branch: main
     pythonVersion: "3.11"
-    buildCommand: pip install --upgrade pip && pip install .
+    # Pre-download Silero VAD + turn-detector ONNX weights at build time so
+    # the first inbound call isn't cold-started by a ~200MB model download.
+    buildCommand: pip install --upgrade pip && pip install . && python -m livekit.agents download-files
     startCommand: aurelia start
     autoDeploy: true
     envVars:

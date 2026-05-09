@@ -98,6 +98,8 @@ LiveKit's docs walk through the exact REST calls; see <https://docs.livekit.io/s
 
 The repo includes `render.yaml`. Push to GitHub, click *New → Blueprint* on Render, point it at the repo, and fill in the secrets the blueprint marks as `sync: false`. The agent runs as a long-lived worker that holds a connection to LiveKit Cloud.
 
+For the full click-by-click — fresh accounts to a public playground link — see [`docs/deploy.md`](docs/deploy.md).
+
 ## Design notes
 
 - **Intake is the contract.** Everything funnels into a single Pydantic `CallerIntake` model, validated before it ever leaves the agent. The model owns the Sheets row layout via `to_sheets_row()`; the LLM never picks the column order.
