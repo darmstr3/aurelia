@@ -27,7 +27,12 @@ from livekit.agents import (
     function_tool,
 )
 from livekit.plugins import deepgram, openai, silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
+
+# NOTE: turn detector is intentionally disabled in production. The
+# multilingual model alone adds ~200MB at runtime and OOMs Render's 512MB
+# starter plan. Re-enable when on a 2GB+ instance:
+#     from livekit.plugins.turn_detector.multilingual import MultilingualModel
+#     ...AgentSession(..., turn_detection=MultilingualModel())
 from pydantic import Field, ValidationError
 
 from aurelia.config import Settings, get_settings
@@ -180,12 +185,9 @@ class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
 
 
 def _build_session(settings: Settings) -> AgentSession:
-    """Compose STT / LLM / TTS / VAD / turn detection using values from settings.
+    """Compose STT / LLM / TTS / VAD using values from settings.
 
-    The turn detector is a small ONNX model that predicts when the caller has
-    finished speaking; combined with VAD it gives much more natural pacing
-    than VAD-only timing. The model is downloaded once at build time via
-    ``python -m livekit.agents download-files``.
+    Turn detection is currently VAD-only (see note at the top of this file).
     """
     return AgentSession(
         stt=deepgram.STT(model=settings.deepgram_stt_model),
@@ -195,7 +197,6 @@ def _build_session(settings: Settings) -> AgentSession:
             voice=settings.openai_tts_voice,
         ),
         vad=silero.VAD.load(),
-        turn_detection=MultilingualModel(),
     )
 
 

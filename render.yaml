@@ -12,20 +12,16 @@ services:
     plan: starter
     region: oregon
     branch: main
-    # Pre-download Silero VAD + turn-detector ONNX weights at build time so
-    # the first inbound call isn't cold-started by a ~200MB model download.
-    # HF_HOME points into the project source dir so the cache is preserved
-    # from Render's build container into the runtime container (the default
-    # ~/.cache/huggingface path is NOT preserved).
+    # Pre-download Silero VAD weights at build time. (Turn detector is
+    # disabled in code to fit the 512MB starter plan, so we don't need its
+    # weights either.)
     # Python version is read from .python-version (3.11).
-    buildCommand: pip install --upgrade pip && pip install . && HF_HOME=/opt/render/project/src/.hf-cache aurelia download-files
+    buildCommand: pip install --upgrade pip && pip install . && aurelia download-files
     startCommand: aurelia start
     autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-      - key: HF_HOME
-        value: /opt/render/project/src/.hf-cache
       - key: AURELIA_ENV
         value: prod
       - key: AURELIA_LOG_LEVEL
