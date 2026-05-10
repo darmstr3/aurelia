@@ -12,13 +12,15 @@ services:
     plan: starter
     region: oregon
     branch: main
-    pythonVersion: "3.11"
     # Pre-download Silero VAD + turn-detector ONNX weights at build time so
     # the first inbound call isn't cold-started by a ~200MB model download.
+    # Python version is read from .python-version (3.11).
     buildCommand: pip install --upgrade pip && pip install . && python -m livekit.agents download-files
     startCommand: aurelia start
     autoDeploy: true
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
       - key: AURELIA_ENV
         value: prod
       - key: AURELIA_LOG_LEVEL
