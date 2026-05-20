@@ -38,6 +38,7 @@ from pydantic import Field, ValidationError
 from aurelia.config import Settings, get_settings
 from aurelia.escalation import EmergencyPager
 from aurelia.intake import CallerIntake, PatientStatus, ReasonForCall, Urgency
+from aurelia.knowledge import lookup_price, search_faq
 from aurelia.logging import configure as configure_logging
 from aurelia.logging import get_logger
 from aurelia.prompts import greeting, system_prompt
@@ -182,6 +183,81 @@ class IntakeAgent(Agent):  # type: ignore[misc]  # livekit Agent isn't typed
             f"All set, {intake.caller_name}. We'll call you back at "
             f"{intake.callback_number} {intake.callback_window}."
         )
+
+    @function_tool()
+    async def lookup_treatment_price(
+        self,
+        ctx: RunContext,
+        treatment: Annotated[
+            str,
+            Field(
+                description=(
+                    "The treatment the caller asked the price of, in their own "
+                    "words (e.g. 'Botox', 'lip filler', 'laser hair removal', "
+                    "'HydraFacial')."
+                )
+            ),
+        ],
+    ) -> str:
+        """Return a voice-friendly pricing range for a treatment.
+
+        Returns either a quotable line the agent can read aloud, or a "no
+        match" string telling the agent to log the inquiry as an intake
+        instead of guessing.
+        """
+        log = _log.bind(query=treatment)
+        quote = lookup_price(treatment)
+        if quote is None:
+            log.info("lookup_price.no_match")
+            return (
+                "We don't have a published price for that — capture the "
+                "caller's information through submit_intake and our team will "
+                "follow up with a quote during business hours. Do not guess "
+                "or estimate the price."
+            )
+        log.info("lookup_price.matched", treatment=quote.treatment)
+        # Phrasing guidance for the model — tell it what to say, not the raw fields.
+        return (
+            f"{quote.treatment} runs {quote.price_range} {quote.unit}. "
+            f"{quote.notes} Tell the caller this is general pricing — exact "
+            "quotes come from the consultation. Then ask if they'd like to "
+            "book a consult so you can submit their intake."
+        )
+
+    @function_tool()
+    async def answer_treatment_faq(
+        self,
+        ctx: RunContext,
+        question: Annotated[
+            str,
+            Field(
+                description=(
+                    "The caller's question in their own words "
+                    "(e.g. 'what is Botox?', 'does filler hurt?', "
+                    "'are consultations free?')."
+                )
+            ),
+        ],
+    ) -> str:
+        """Look up a canonical FAQ answer.
+
+        Returns either the canned answer (which the agent should speak
+        verbatim or near-verbatim) or a "no match" string telling the agent
+        to capture the question as an intake. The agent must not invent an
+        answer.
+        """
+        log = _log.bind(question=question)
+        entry = search_faq(question)
+        if entry is None:
+            log.info("answer_faq.no_match")
+            return (
+                "We don't have a canned answer for that — tell the caller "
+                "you'll have someone with more details follow up during "
+                "business hours, then collect their intake via submit_intake. "
+                "Do not make up an answer."
+            )
+        log.info("answer_faq.matched", topic=entry.topic)
+        return entry.answer
 
 
 def _build_session(settings: Settings) -> AgentSession:
